@@ -5,19 +5,15 @@ from models.ENet import ENet
 
 
 def _load(checkpoint_path):
-    checkpoint = torch.load(checkpoint_path)
-    return checkpoint
+    return torch.load(checkpoint_path)
 
 def load_checkpoint(path, model):
-    print("Load checkpoint from: {}".format(path))
+    print(f"Load checkpoint from: {path}")
     checkpoint = _load(path)
     s = checkpoint["state_dict"] if 'arcface' not in path else checkpoint
-    new_s = {}
-    for k, v in s.items():
-        if 'low_res' in k:
-            continue
-        else:
-            new_s[k.replace('module.', '')] = v
+    new_s = {
+        k.replace('module.', ''): v for k, v in s.items() if 'low_res' not in k
+    }
     model.load_state_dict(new_s, strict=False)
     return model
 
@@ -30,7 +26,7 @@ def load_network(args):
 
 def load_DNet(args):
     D_Net = DNet()
-    print("Load checkpoint from: {}".format(args.DNet_path))
+    print(f"Load checkpoint from: {args.DNet_path}")
     checkpoint =  torch.load(args.DNet_path, map_location=lambda storage, loc: storage)
     D_Net.load_state_dict(checkpoint['net_G_ema'], strict=False)
     return D_Net.eval()
