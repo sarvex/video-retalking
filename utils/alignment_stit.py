@@ -24,10 +24,7 @@ def get_landmark(filepath, predictor, detector=None, fa=None):
     if fa is not None:
         image = io.imread(filepath)
         lms, _, bboxes = fa.get_landmarks(image, return_bboxes=True)
-        if len(lms) == 0:
-            return None
-        return lms[0]
-
+        return None if len(lms) == 0 else lms[0]
     if detector is None:
         detector = dlib.get_frontal_face_detector()
     if isinstance(filepath, PIL.Image.Image):
@@ -42,11 +39,8 @@ def get_landmark(filepath, predictor, detector=None, fa=None):
     else:
         return None
     t = list(shape.parts())
-    a = []
-    for tt in t:
-        a.append([tt.x, tt.y])
-    lm = np.array(a)
-    return lm
+    a = [[tt.x, tt.y] for tt in t]
+    return np.array(a)
 
 
 def align_face(filepath_or_image, predictor, output_size, detector=None,
@@ -59,10 +53,9 @@ def align_face(filepath_or_image, predictor, output_size, detector=None,
     c, x, y = compute_transform(filepath_or_image, predictor, detector=detector,
                                 scale=scale)
     quad = np.stack([c - x - y, c - x + y, c + x + y, c + x - y])
-    img = crop_image(filepath_or_image, output_size, quad, enable_padding=enable_padding)
-
-    # Return aligned image.
-    return img
+    return crop_image(
+        filepath_or_image, output_size, quad, enable_padding=enable_padding
+    )
 
 
 def crop_image(filepath, output_size, quad, enable_padding=False):
@@ -89,7 +82,7 @@ def crop_image(filepath, output_size, quad, enable_padding=False):
             min(crop[3] + border, img.size[1]))
     if (crop[2] - crop[0] < img.size[0] or crop[3] - crop[1] < img.size[1]):
         img = img.crop(crop)
-        quad -= crop[0:2]
+        quad -= crop[:2]
     # Pad.
     pad = (int(np.floor(min(quad[:, 0]))), int(np.floor(min(quad[:, 1]))), int(np.ceil(max(quad[:, 0]))),
            int(np.ceil(max(quad[:, 1]))))
@@ -117,7 +110,7 @@ def compute_transform(lm, predictor, detector=None, scale=1.0, fa=None):
     # lm = get_landmark(filepath, predictor, detector, fa)
     # if lm is None:
         # raise Exception(f'Did not detect any faces in image: {filepath}')
-    lm_chin = lm[0: 17]  # left-right
+    lm_chin = lm[:17]
     lm_eyebrow_left = lm[17: 22]  # left-right
     lm_eyebrow_right = lm[22: 27]  # left-right
     lm_nose = lm[27: 31]  # top-down
@@ -148,17 +141,15 @@ def compute_transform(lm, predictor, detector=None, scale=1.0, fa=None):
 
 def crop_faces(IMAGE_SIZE, files, scale, center_sigma=0.0, xy_sigma=0.0, use_fa=False, fa=None):
     if use_fa:
-        if fa == None:
+        if fa is None:
             fa = face_alignment.FaceAlignment(face_alignment.LandmarksType._2D, flip_input=True)
-        predictor = None
-        detector = None
     else:
         fa = None
-        predictor = None
-        detector = None
-        # predictor = dlib.shape_predictor(paths_config.shape_predictor_path)
-        # detector = dlib.get_frontal_face_detector()
+            # predictor = dlib.shape_predictor(paths_config.shape_predictor_path)
+            # detector = dlib.get_frontal_face_detector()
 
+    detector = None
+    predictor = None
     cs, xs, ys = [], [], []
     for lm, pil in tqdm(files):
         c, x, y = compute_transform(lm, predictor, detector=detector,
@@ -199,9 +190,12 @@ def crop_faces_by_quads(IMAGE_SIZE, files, quads):
 def calc_alignment_coefficients(pa, pb):
     matrix = []
     for p1, p2 in zip(pa, pb):
-        matrix.append([p1[0], p1[1], 1, 0, 0, 0, -p2[0] * p1[0], -p2[0] * p1[1]])
-        matrix.append([0, 0, 0, p1[0], p1[1], 1, -p2[1] * p1[0], -p2[1] * p1[1]])
-
+        matrix.extend(
+            (
+                [p1[0], p1[1], 1, 0, 0, 0, -p2[0] * p1[0], -p2[0] * p1[1]],
+                [0, 0, 0, p1[0], p1[1], 1, -p2[1] * p1[0], -p2[1] * p1[1]],
+            )
+        )
     a = np.matrix(matrix, dtype=float)
     b = np.array(pb).reshape(8)
 
